@@ -13,6 +13,8 @@ from datasets import load_dataset, load_from_disk
 
 from helper import get_class, set_seed, get_tokenize_function, get_metric
 
+import pandas as pd
+
 @dataclasses.dataclass
 class CustomTrainingArguments(TrainingArguments):
     model_name: str = ''
@@ -31,7 +33,7 @@ class CustomTrainer(Trainer):
         device = model.module.device if isinstance(model, nn.DataParallel) else model.device
         inputs = {k: v.to(device) for k, v in inputs.items()}
 
-        print(inputs.keys())
+        # print(inputs.keys())
 
         # Forward pass with required arguments
         # outputs = model(input_ids=input_ids, attention_mask=attention_mask)
@@ -170,13 +172,47 @@ def trainer(args):
         "eval/final_loss": final_eval_results['eval_loss']
     })
 
+    # Add result to csv file
+    # Define the path to the CSV file
+    csv_file = "data.csv"
+
+    # Check if the CSV file exists
+    if os.path.exists(csv_file):
+        # Load the existing CSV into a DataFrame
+        df = pd.read_csv(csv_file)
+        print("CSV loaded successfully.")
+    else:
+        # Define column names and data types
+        column_types = {
+            "Filename": str,
+            "Epoch": int,            # Integer type for epoch numbers
+            "Scratch": bool,        # Float type for scratch values
+            "Finetune": str,    # String type for finetune data
+            "Eval": str,         # String type for evaluation data
+            "Seed": int
+        }
+
+        # Initialize DataFrame with column names and types
+        df = pd.DataFrame({col: pd.Series(dtype=dt) for col, dt in column_types.items()})
+        print("CSV not found. Initialized a new DataFrame.")
+
+    # Add new data (example data)
+    if args.training_dataset == '':
+        args.training_dataset = 'SAE'
+
+    new_data = {"Filename": args.filename, "Epoch": args.max_epoch, "Scratch": args.scratch, "Finetune": args.training_dataset, "Eval": args.validation_dataset, "Seed": args.seed}
+    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+
+    # Save the DataFrame to the CSV file
+    df.to_csv(csv_file, index=False)
+    print(f"Data saved to {csv_file}.")
+
     # Optionally, you can print or save the final evaluation metrics
     print("Final Evaluation Results:", final_eval_results)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='SHOT adaptation for RoBERTa on GLUE tasks')
     parser.add_argument('--scratch', action='store_true', help='Train frmo scratch')
-
 
     parser.add_argument('--gpu_id', type=str, default='2', help="GPU id to use")
     parser.add_argument('--dset', type=str, default='rte', choices=["sst2", "mnli", "mrpc", "cola", "stsb", "qqp", "rte", "wnli", "qnli"], help="GLUE task name")
@@ -211,7 +247,7 @@ if __name__ == "__main__":
     args.num_input, args.class_num = get_class(args.dset)
 
     # Set environment variables and seeds
-    os.environ["CUDA_VISIBLE_DEVICES"] = "2,3" # args.gpu_id
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2" # args.gpu_id
 
     # Looping over the target domains to perform adaptation for each:        
     trainer(args)
