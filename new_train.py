@@ -6,6 +6,10 @@ import time
 
 import torch
 import torch.nn as nn
+
+# from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.nn import DataParallel as DDP
+
 from transformers import RobertaForSequenceClassification, RobertaConfig, RobertaTokenizer, Trainer, TrainingArguments, DataCollatorWithPadding
 from torch.utils.tensorboard import SummaryWriter
 import evaluate
@@ -30,7 +34,8 @@ class CustomTrainer(Trainer):
         self.loss = nn.CrossEntropyLoss(label_smoothing=self.args.label_smoothing)
         
     def compute_loss(self, model, inputs, return_outputs=False):
-        device = model.module.device if isinstance(model, nn.DataParallel) else model.device
+        # device = model.module.device if isinstance(model, DDP) else model.device
+        device = model.device
         inputs = {k: v.to(device) for k, v in inputs.items()}
 
         # print(inputs.keys())
@@ -60,16 +65,30 @@ def trainer(args):
         label_smoothing=0.1,
 
         output_dir=args.result_dir,
-        eval_strategy="epoch",
+        # eval_strategy="epoch",
         learning_rate=args.lr,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
+
+        fp16=True,
+
         num_train_epochs=args.max_epoch,
         weight_decay=args.weight_decay,
         logging_dir=args.logging_dir,
         logging_steps=args.logging_steps,
         save_total_limit=args.save_total_limit,
+        remove_unused_columns=False
     )
+
+    if args.dset == 'stsb':
+        metr = 'pearson'
+    elif args.dset == 'cola':
+        metr = 'eval_matthews_correlation'
+    elif args.dset in ['rte', 'sst2', 'mrpc', 'qqp', 'mnli', 'qnli', 'wnli']:
+        metr = 'eval_accuracy'
+    else:
+        raise Exception(f"{args.dset} is an invalid dataset") 
+    
 
     # # Load the tokenizer and model
     tokenizer = RobertaTokenizer.from_pretrained(training_args.model_name)
@@ -101,23 +120,23 @@ def trainer(args):
     # device = torch.device(f'cuda:0')
 
     device = torch.device('cuda')
-    if torch.cuda.device_count() > 1:
-        print(f"Using {torch.cuda.device_count()} GPUs")
-        model = nn.DataParallel(model)
+    # if torch.cuda.device_count() > 1:
+    #     print(f"Using {torch.cuda.device_count()} GPUs")
+    #     model = DDP(model)
 
-        model.module.to(device)
-    else:
-        model.to(device)
+    #     model.module.to(device)
+    # else:
+    model.to(device)
     
     # Set up dataset
     test_size = 64
 
     if args.training_dataset == '':
-        train_dataset = load_dataset("glue", training_args.dset, split='train').select(range(test_size))
+        train_dataset = load_dataset("glue", training_args.dset, split='train')#.select(range(test_size))
         # print('RUNNING without training_dataset')
         # exit(0)
     else:
-        train_dataset = load_from_disk(args.training_dataset).select(range(test_size))
+        train_dataset = load_from_disk(args.training_dataset)#.select(range(test_size))
         # print('RUNNING with training_dataset')
         # exit(0)
 
@@ -156,9 +175,8 @@ def trainer(args):
     trainer.train()
 
     # model.save_pretrained(args.model_dir)
-    model.module.save_pretrained(args.model_dir) if isinstance(model, nn.DataParallel) else model.save_pretrained(args.model_dir)
-    tokenizer.save_pretrained(args.token_dir)
-
+    # model.module.save_pretrained(args.model_dir) if isinstance(model, DDP) else model.save_pretrained(args.model_dir)
+    model.save_pretrained(args.model_dir)
     tokenizer.save_pretrained(args.token_dir)
 
     # Evaluate the model
@@ -166,9 +184,12 @@ def trainer(args):
     # Evaluate the model on the full validation dataset after training
     final_eval_results = trainer.evaluate(eval_dataset=tokenized_validation_datasets)
 
+    print(final_eval_results.keys())
+
     # Log the final evaluation metrics explicitly with a custom step or label
+
     trainer.log({
-        "eval/final_accuracy": final_eval_results['eval_accuracy'],  # Example, log additional metrics as needed
+        "eval/final_accuracy": final_eval_results[metr],  # Example, log additional metrics as needed
         "eval/final_loss": final_eval_results['eval_loss']
     })
 
@@ -185,11 +206,13 @@ def trainer(args):
         # Define column names and data types
         column_types = {
             "Filename": str,
+            "Dataset": str,
             "Epoch": int,            # Integer type for epoch numbers
             "Scratch": bool,        # Float type for scratch values
             "Finetune": str,    # String type for finetune data
             "Eval": str,         # String type for evaluation data
-            "Seed": int
+            "Seed": int,
+            "Acc": float
         }
 
         # Initialize DataFrame with column names and types
@@ -200,7 +223,7 @@ def trainer(args):
     if args.training_dataset == '':
         args.training_dataset = 'SAE'
 
-    new_data = {"Filename": args.filename, "Epoch": args.max_epoch, "Scratch": args.scratch, "Finetune": args.training_dataset, "Eval": args.validation_dataset, "Seed": args.seed}
+    new_data = {"Filename": args.filename, "Dataset": args.dset, "Epoch": args.max_epoch, "Scratch": args.scratch, "Finetune": args.training_dataset, "Eval": args.validation_dataset, "Seed": args.seed, "Acc": final_eval_results[metr]}
     df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
 
     # Save the DataFrame to the CSV file
@@ -225,7 +248,7 @@ if __name__ == "__main__":
     parser.add_argument('--validation_dataset', type=str)
 
     parser.add_argument('--max_epoch', type=int, default=50, help="Number of training epochs")
-    parser.add_argument('--batch_size', type=int, default=16, help="Batch size for training")
+    parser.add_argument('--batch_size', type=int, default=32, help="Batch size for training") #16 can go up to 128
     parser.add_argument('--lr', type=float, default=1e-5, help="Learning rate")
     parser.add_argument('--weight_decay', type=float, default=0.01, help="Weight decay for the optimizer")
 
@@ -247,10 +270,13 @@ if __name__ == "__main__":
     args.num_input, args.class_num = get_class(args.dset)
 
     # Set environment variables and seeds
-    os.environ["CUDA_VISIBLE_DEVICES"] = "2" # args.gpu_id
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2,3" # args.gpu_id
 
     # Looping over the target domains to perform adaptation for each:        
     trainer(args)
 
 # Baseline: output/models/train/roberta-base_rte_1730199414_model
 # Skyline
+
+# CUDA_VISIBLE_DEVICES=2,3 python -m torch.distributed.launch --nproc_per_node=2 new_train.py --scratch --max_epoch 2 --training_dataset datasets/rte_Nigerian_train --validation_dataset datasets/rte_Nigerian_validation
+# CUDA_VISIBLE_DEVICES=2,3 accelerate launch new_train.py --scratch --max_epoch 30 --training_dataset datasets/rte_Nigerian_train --validation_dataset datasets/rte_Nigerian_validation
