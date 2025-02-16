@@ -1,4 +1,25 @@
-# CUDA_VISIBLE_DEVICES=1,2,3,4,5,6 accelerate launch train.py --seed 42 --max_epoch 30 --dset amazon_text --training_dataset book --validation_dataset elec --train_size 500
+# Code is referenced from https://github.com/tim-learn/SHOT
+# MIT License
+
+# Copyright (c) 2020
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 import argparse
 import os
@@ -15,6 +36,8 @@ from datasets import load_dataset, load_from_disk
 from accelerate import Accelerator
 
 from helper import get_class, set_seed, BiGRU, Classifier, MultiModelWrapper
+
+DATASET_PATH = ''
 
 class FinetuneTrainer(Trainer):
     def __init__(self, *args, **kwargs):
@@ -83,22 +106,22 @@ def trainer(args, accelerator):
 
     if args.dset == 'besstie':
         # # BESSTIE Dataset
-        train_dataset = load_dataset("json", data_files=f"datasets/BESSTIE-sentiment/train/{args.training_dataset}.jsonl")['train']
+        train_dataset = load_dataset("json", data_files=f"{DATASET_PATH}/BESSTIE-sentiment/train/{args.training_dataset}.jsonl")['train']
         train_dataset = train_dataset.rename_column("text", "sentence")
         train_dataset = train_dataset.rename_column("sentiment_label", "label")
 
-        validation_dataset = load_dataset("json", data_files=f"datasets/BESSTIE-sentiment/valid/{args.validation_dataset}.jsonl")['train']
+        validation_dataset = load_dataset("json", data_files=f"{DATASET_PATH}/BESSTIE-sentiment/valid/{args.validation_dataset}.jsonl")['train']
         validation_dataset = validation_dataset.rename_column("text", "sentence")
         validation_dataset = validation_dataset.rename_column("sentiment_label", "label")
         validation_dataset = validation_dataset.remove_columns('id')
     
     elif args.dset == 'amazon_text':
         # # AMAZON_TEXT
-        train_dataset = load_dataset('json', data_files=f'/mnt/data728/datasets/amazon_text/{args.training_dataset}.json', split='train')
+        train_dataset = load_dataset('json', data_files=f'{DATASET_PATH}/amazon_text/{args.training_dataset}.json', split='train')
         train_dataset = train_dataset.rename_column("review", "sentence")
         train_dataset = train_dataset.remove_columns(["summary", "helpful"])
 
-        validation_dataset = load_dataset('json', data_files=f'/mnt/data728/datasets/amazon_text/{args.validation_dataset}.json', split='train')
+        validation_dataset = load_dataset('json', data_files=f'{DATASET_PATH}/amazon_text/{args.validation_dataset}.json', split='train')
         validation_dataset = validation_dataset.rename_column("review", "sentence")
         validation_dataset = validation_dataset.remove_columns(["summary", "helpful"])
 
@@ -106,12 +129,12 @@ def trainer(args, accelerator):
         if args.training_dataset.endswith('_SAE_train'):
             train_dataset = load_dataset("glue", args.dset, split='train')
         else:
-            train_dataset = load_from_disk(f'/mnt/data728/datasets/multivalue/{args.training_dataset}')
+            train_dataset = load_from_disk(f'{DATASET_PATH}/multivalue/{args.training_dataset}')
 
         if args.validation_dataset.endswith('_SAE_validation'):
             validation_dataset = load_dataset("glue", args.dset, split='validation')
         else:
-            validation_dataset = load_from_disk(f'/mnt/data728/datasets/multivalue/{args.validation_dataset}')
+            validation_dataset = load_from_disk(f'{DATASET_PATH}/multivalue/{args.validation_dataset}')
 
     if args.train_size > 0:
         train_dataset = train_dataset.shuffle(seed=args.seed).select(range(args.train_size))

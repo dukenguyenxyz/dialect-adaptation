@@ -1,26 +1,14 @@
+import dataclasses
+import random
+import numpy as np
+
 import torch
 import torch.nn as nn
-import numpy as np
-import random
 from scipy.spatial.distance import cdist
-import dataclasses
 from transformers import TrainingArguments
-
-from transformers import RobertaModel, RobertaConfig
 
 @dataclasses.dataclass
 class TestCustomTrainingArguments(TrainingArguments):
-    # output_dir: str = ''
-    # eval_strategy: str = 'epoch'
-    # learning_rate: float = 0
-    # per_device_train_batch_size: int = 16
-    # per_device_eval_batch_size: int = 16
-    # num_train_epochs: int = 30
-    # weight_decay: float = 0.01
-    # logging_dir: str = './'
-    # logging_steps: int = 10
-    # save_total_limit: int = 1
-
     class_num: int = 2
 
     ent: bool = True
@@ -41,9 +29,6 @@ def Entropy(input_, epsilon):
 
 def obtain_label(inputs_, model, args, out_file, stats):
     with torch.no_grad():
-        # inputs = inputs_['input_ids'].to(args.device)
-
-        # ACTUAL LABEL
         labels = inputs_['labels'].to(args.device)
 
         all_fea, all_output = model(inputs_, feat=True)
@@ -88,13 +73,10 @@ def obtain_label(inputs_, model, args, out_file, stats):
 
         aff = np.eye(K)[predict]
 
-    # ASSIGN NEW LABEL
     acc_post_tta = np.sum(predict == all_label.float().cpu().numpy()) / len(all_fea)
 
-    # THEY ARE FREAKING EQUAL
     print("Embedding is updated: ", (old_predict==predict).all())
 
-    # THIS SHOULD BE DIFFERENT BUT POSSIBLE THAT IT IS NOT DIFFERENT INTERVAL NEEDS TO INCREASE
     log_str = 'Accuracy = {:.2f}% -> {:.2f}%'.format(acc_pre_tta * 100, acc_post_tta * 100)
 
     if acc_post_tta > acc_pre_tta:
@@ -196,10 +178,6 @@ def get_metric(metric):
 
     return compute_metrics
 
-# Calculate distance:
-# Get 50 random entry from one dialect vs another 50 random entry from another dialect
-# Get the average pairwise cosine distance????
-
 # NetB
 class BiGRU(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers=2, dropout=0.5):
@@ -207,58 +185,21 @@ class BiGRU(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True, bidirectional=True, dropout=dropout)
-        # self.batch_norm = nn.BatchNorm1d(hidden_size * 2)
 
     def forward(self, x):
         h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_size).to(x.device)  # *2 for bidirectional
         out, _ = self.gru(x, h0)
-        # out = self.batch_norm(out)  # Apply Batch Normalization
         return out
 
 # NetC
-# class Classifier(nn.Module):
-#     def __init__(self, hidden_size, output_size):
-#         super(Classifier, self).__init__()
-#         self.fc = nn.Linear(hidden_size * 2, output_size)  # *2 for bidirectional
-        
-#     def forward(self, x):
-#         out = self.fc(x[:, -1, :])
-#         return out
-
 class Classifier(nn.Module):
     def __init__(self, hidden_size, output_size, dropout_rate=0.5):
         super(Classifier, self).__init__()
         self.fc1 = nn.Linear(hidden_size * 2, hidden_size)  # First layer
-        # self.dropout = nn.Dropout(dropout_rate)
         self.fc2 = nn.Linear(hidden_size, output_size)      # Second layer
 
     def forward(self, x):
         x = self.fc1(x[:, -1, :])
         x = nn.ReLU()(x)               # Activation function
-        # x = self.dropout(x)            # Apply Dropout after activation
         out = self.fc2(x)
         return out
-
-# Example usage:
-
-# model_name = 'roberta-base'
-# netF = RobertaModel.from_pretrained(model_name)
-# mid_hidden_size = netF.config.hidden_size // 2 # 256
-
-# netB = BiGRU(input_size=netF.config.hidden_size, hidden_size=mid_hidden_size)
-# netC = Classifier(hidden_size=mid_hidden_size, output_size=2)
-
-# for k, v in netC.named_parameters():
-#     v.requires_grad = False
-
-# param_group = []
-# for k, v in netF.named_parameters():
-#     if args.lr_decay1 > 0:
-#         param_group += [{'params': v, 'lr': args.lr * args.lr_decay1}]
-#     else:
-#         v.requires_grad = False
-# for k, v in netB.named_parameters():
-#     if args.lr_decay2 > 0:
-#         param_group += [{'params': v, 'lr': args.lr * args.lr_decay2}]
-#     else:
-#         v.requires_grad = False

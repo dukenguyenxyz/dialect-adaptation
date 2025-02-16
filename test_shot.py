@@ -1,4 +1,25 @@
-# CUDA_VISIBLE_DEVICES=1,2,3,4,5,6 accelerate launch --main_process_port 29600 test_shot.py --dset amazon_text --model_name roberta-base --seed 42 --max_epoch 30 --validation_dataset elec --int_filename book_500
+# Code is referenced from https://github.com/tim-learn/SHOT
+# MIT License
+
+# Copyright (c) 2020
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 import argparse
 import os
@@ -16,6 +37,8 @@ from datasets import load_dataset, load_from_disk
 from accelerate import Accelerator
 
 from helper import get_class, set_seed, get_metric, MultiModelWrapper, BiGRU, Classifier, Entropy, obtain_label, TestCustomTrainingArguments
+
+DATASET_PATH = ''
 
 class CustomTrainer(Trainer):
     def __init__(self, out_file, *args, **kwargs):
@@ -119,20 +142,20 @@ def tester(args, accelerator):
     model = MultiModelWrapper(netF, netB, netC)
 
     if args.dset == 'besstie':
-        dataset = load_dataset("json", data_files=f"datasets/BESSTIE-sentiment/valid/{args.validation_dataset}.jsonl")['train']
+        dataset = load_dataset("json", data_files=f"{DATASET_PATH}/BESSTIE-sentiment/valid/{args.validation_dataset}.jsonl")['train']
         dataset = dataset.rename_column("text", "sentence")
         dataset = dataset.rename_column("sentiment_label", "labels")
         dataset = dataset.remove_columns('id')
     
     elif args.dset == 'amazon_text':
-        dataset = load_dataset('json', data_files=f'/mnt/data728/datasets/amazon_text/{args.validation_dataset}.json', split='train')            
+        dataset = load_dataset('json', data_files=f'{DATASET_PATH}/amazon_text/{args.validation_dataset}.json', split='train')            
         dataset = dataset.rename_column("review", "sentence")
         dataset = dataset.remove_columns(["summary", "helpful"])
         dataset = dataset.rename_column("label", "labels")
 
     elif args.dset in ['cola', 'mnli', 'qnli', 'rte', 'qqp', 'sst2', 'sts-b']:
         if args.validation_dataset:
-            dataset = load_from_disk(f'/mnt/data728/datasets/multivalue/{args.validation_dataset}')    
+            dataset = load_from_disk(f'{DATASET_PATH}/multivalue/{args.validation_dataset}')    
         else:
             dataset = load_dataset("glue", args.dset, split='validation')
             args.validation_dataset = args.dset + '_SAE_validation'

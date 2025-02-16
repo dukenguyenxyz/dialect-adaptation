@@ -1,43 +1,66 @@
-<!-- Original code
+# Harnessing Test-time Adaptation for NLU Tasks Involving Dialects of English
 
-SHOT: https://github.com/tim-learn/SHOT
-SHOT++: https://github.com/tim-learn/SHOT-plus
+> “Adapting at test-time to bridge dialect gaps in NLP.”  
 
-BMD: https://github.com/ispc-lab/BMD 
-NRC: https://github.com/Albert0147/NRC_SFDA 
-LD: https://github.com/fumyou13/LDBE 
-ATP: https://github.com/yxiwang/ATP 
-ASL: https://github.com/cnyanhao/ASL 
-KUDA: https://github.com/tsun/KUDA
-G-SFDA: https://github.com/Albert0147/G-SFDA 
-APA: https://github.com/tsun/APA 
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.txt)  
+[![Python Version](https://img.shields.io/badge/Python-3.12.7-blue.svg)](https://www.python.org/downloads/)
 
-SSNLL: https://arxiv.org/pdf/2102.11614 https://ieeexplore.ieee.org/document/9981099/ https://github.com/mil-tokyo/MCD_DA/ 
+## Table of Contents
 
-Possibly add more methods if I have time -->
+- [Overview](#overview)
+- [Setup](#setup)
+- [Experiments](#experiments)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
+## Overview
+
+This project leverages **Test-time Adaptation (TTA)**—specifically the SHOT technique—to enhance natural language understanding across various English dialects. Traditionally, models are trained on Standard American English (SAE) and then face performance drops when applied to dialects like Indian, Nigerian, or Singaporean English. Here, we address this gap by adapting models on-the-fly during inference without needing additional labeled data.
 
 ## Setup
 
+Follow these steps to get your environment ready:
+
 ```bash
-conda create --name tta python=3.12
+# Create and activate the conda environment with Python 3.12.7
+conda create --name tta python=3.12.7
 conda activate tta
 
-pip install -r tta_env.yml
+# Install all necessary dependencies
+pip install -r requirements.txt
 ```
 
-- Clone `multi_value` into current folder and install
+- **Clone & Install `multi_value`:**  
+  Clone the [`multi_value`](https://github.com/SALT-NLP/multi-value) repository into your working directory and install it as per the instructions provided there.
 
-## Experiment examples
+- **Prepare the Dialectal Datasets:**  
+  Use `multi_value` to generate dialectal GLUE datasets and save them under `DATASET_PATH/multivalue`.
+
+- **Configure Dataset Paths:**  
+  Update the `DATASET_PATH` constant in both `train.py` and `test_shot.py` to point to your datasets.
+
+## Experiments
+
+### Training
+
+Run training with SHOT on the CoLA dataset by executing:
 
 ```bash
-# Pretrained SAE RTE Nigerian
-python new_train.py --scratch --max_epoch 30 --validation_dataset datasets/rte_Nigerian_validation
-
-# Pretrained Nigerian RTE Nigerian
-python new_train.py --scratch --max_epoch 30 --training_dataset datasets/rte_Nigerian_train --validation_dataset datasets/rte_Nigerian_validation
-
-# From scratch SAE RTE Nigerian
-python new_train.py --max_epoch 30 --validation_dataset datasets/rte_Nigerian_validation
-# From scratch Nigerian RTE Nigerian
-python new_train.py --max_epoch 30 --training_dataset datasets/rte_Nigerian_train --validation_dataset datasets/rte_Nigerian_validation
+CUDA_VISIBLE_DEVICES=1,2,3,4,5,6 accelerate launch train.py --seed 42 --max_epoch 30 --dset cola
 ```
+
+### Test-time Adaptation
+
+Evaluate test-time adaptation using a pre-trained model (`roberta-base`):
+
+```bash
+CUDA_VISIBLE_DEVICES=1,2,3,4,5,6 accelerate launch --main_process_port 29600 test_shot.py --dset cola --model_name roberta-base --seed 42 --max_epoch 30 --int_filename cola_SAE_train_0 --validation_dataset cola_Indian_validation --val_size 0
+```
+
+These commands utilize multiple GPUs for accelerated training and testing.
+
+## License
+
+Distributed under the MIT License. See [LICENSE.txt](LICENSE.txt) for more details.
+
+<p align="right"><a href="#top">Back to top</a></p>
