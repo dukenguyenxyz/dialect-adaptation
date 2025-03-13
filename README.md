@@ -59,6 +59,9 @@ CUDA_VISIBLE_DEVICES=1,2,3,4,5,6 accelerate launch --main_process_port 29600 tes
 
 These commands utilize multiple GPUs for accelerated training and testing.
 
+## Acknowledgement
+The production of this code was partially possible through the use of code assistants, generative AI tools.
+
 ## License
 
 Distributed under the MIT License. See [LICENSE.txt](LICENSE.txt) for more details.
