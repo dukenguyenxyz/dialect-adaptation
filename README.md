@@ -27,7 +27,9 @@ conda create --name tta python=3.12.7
 conda activate tta
 
 # Install all necessary dependencies
-pip install -r requirements.txt
+% pip install -r requirements.txt
+pip install torch==2.4.1
+pip install numpy===1.26.4 pandas==2.2.2 torchaudio torchvision transformers==4.44.2 evaluate==0.4.3 datasets==2.19.1 accelerate==1.0.1 scipy==1.13.1
 ```
 
 - **Clone & Install `multi_value`:**  
